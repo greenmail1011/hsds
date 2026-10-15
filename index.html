@@ -167,18 +167,20 @@ select{border:1px solid var(--line);border-radius:6px;padding:4px 6px;background
     <div class="row">
       <span class="pill" id="conn">連線中…</span>
       <button class="btn" id="btnReload">重新載入</button>
-      <button class="btn" id="btnSetup">連線設定</button>
+      <button class="btn" id="btnSetup">登入</button>
     </div>
   </header>
 
   <section id="v-setup" class="panel" hidden style="max-width:600px">
-    <h2>連線到你的 Google 試算表</h2>
-    <p class="hint">每台裝置第一次使用時填一次，之後會記住。網址和密碼只存在這台裝置的瀏覽器裡，不會出現在網頁程式碼中。</p>
-    <div class="form">
-      <label for="c-url">Apps Script 網址</label><input id="c-url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
-      <label for="c-pw">密碼</label><input id="c-pw" type="password" autocomplete="current-password">
-    </div>
-    <div class="row"><button class="btn main" id="c-go">連線</button><span class="hint" id="c-msg"></span></div>
+    <h2>登入社團點名簿</h2>
+    <p class="hint">使用老師的 Google 帳號登入，即可讀取名單並自動儲存出缺席與分數。</p>
+    <div class="row"><button class="btn main" id="c-go">使用 Google 帳號登入</button><span class="hint" id="c-msg" role="status"></span></div>
+  </section>
+  <section id="initPanel" class="panel" hidden>
+    <h2>匯入本學期資料</h2>
+    <p class="hint">選取學期資料 JSON，匯入名單與既有出缺席。匯入成功後會關閉此區。</p>
+    <input type="file" id="importFile" accept=".json,application/json" aria-label="學期資料 JSON">
+    <span class="hint" id="importMsg" role="status"></span>
   </section>
 
   <nav class="tabs" role="tablist">
@@ -273,7 +275,10 @@ select{border:1px solid var(--line);border-radius:6px;padding:4px 6px;background
 </dialog>
 <div class="toast" id="toast" role="status"></div>
 
-<script>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js';
+import { getFirestore, doc, collection, getDocFromServer, getDocsFromServer, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js';
 const TZ='Asia/Taipei';
 const todayStr=()=>new Date().toLocaleDateString('sv-SE',{timeZone:TZ});
 const STAT={P:'出席',T:'遲到',L:'請假',A:'曠課'};
@@ -288,24 +293,89 @@ const S={students:[],groups:[],days:{},local:{},date:defaultDate(),reason:'',tab
 try{const v=localStorage.getItem('xs-roll-sort'); if(v) S.sortBy=v;}catch(e){}
 const GC=['#0089bf','#d1287a','#d97a00','#16884a','#7a4fd0','#c42f2f','#00897b','#8a6d3b','#3d5afe','#6b7c8a'];
 try{const t=localStorage.getItem('xs-roll-tab'); if(t) S.tab=t;}catch(e){}
-// ---------- Google 試算表連線 ----------
-const CFG_KEY='xs-roll-cfg';
-let cfg=null; try{cfg=JSON.parse(localStorage.getItem(CFG_KEY)||'null');}catch(e){}
-let inflight=0,lastErr=false;
-const ERR={wrong_password:'密碼不對，請重新輸入',change_password:'請先在 Apps Script 程式碼最上面把 PASSWORD 改成你自己的密碼，並重新部署',
-  network:'連不到試算表。請確認網址是 /exec 結尾，而且部署時「誰可以存取」選了「所有人」',busy:'試算表忙碌中，稍後會自動重試',server:'試算表發生錯誤'};
-async function api(action,payload={}){
+// Firebase connects this page to the club's private register.
+const FIREBASE_CONFIG = {"apiKey": "AIzaSyDKDQZfh-HCIeZaxf1H0A1rvnlupCmT72c", "authDomain": "xiangshan-drone-rollbook.firebaseapp.com", "projectId": "xiangshan-drone-rollbook", "storageBucket": "xiangshan-drone-rollbook.firebasestorage.app", "messagingSenderId": "615730090310", "appId": "1:615730090310:web:575172631cba46d2a45547"};
+const OWNER_EMAIL = 'greenmail101101@gmail.com';
+const BOOK_ID = 'xiangshan-115-1';
+const firebaseApp = initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(firebaseApp);
+const db = getFirestore(firebaseApp);
+const bookRef = doc(db, 'rollbooks', BOOK_ID);
+const daysRef = collection(bookRef, 'days');
+let cfg = null, inflight = 0, lastErr = false, initialized = false;
+const ERR = {
+  network:'暫時連不到 Firebase，請檢查網路後重試。',
+  'permission-denied':'這個 Google 帳號尚未取得點名簿權限。',
+  unavailable:'Firebase 暫時無法連線，請稍後重試。',
+  'auth/unauthorized-domain':'此網站尚未加入 Firebase 的允許網域。',
+  'auth/popup-blocked':'瀏覽器擋住了登入視窗，請允許彈出視窗後重試。',
+  'auth/popup-closed-by-user':'登入視窗已關閉，請再按一次 Google 登入。',
+  conflict:'另一台裝置剛更新這天的資料。畫面上的修改已保留，請先複製需要的內容，再重新開啟網頁。'
+};
+const revisions = new Map();
+let writeGeneration=0;
+function normalizeStudent(s) {
+  const text = (v,n=40)=>String(v??'').trim().slice(0,n);
+  if(!/^[A-Za-z0-9_-]{1,60}$/.test(s.key||'')) throw new Error('學生代碼格式不正確');
+  return {key:s.key,cls:text(s.cls),seat:text(s.seat),sid:text(s.sid),name:text(s.name),active:s.active!==false,group:text(s.group,60)};
+}
+async function api(action,payload={}) {
+  if(!cfg) throw {code:'permission-denied'};
   inflight++; setConn();
-  try{
-    let r,j;
-    try{ r=await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,token:cfg.token,...payload})}); }
-    catch(e){ throw {code:'network'}; }
-    if(!r.ok) throw {code:'network'};
-    try{ j=await r.json(); }catch(e){ throw {code:'network'}; }
-    if(!j.ok) throw {code:j.error||'server'};
-    lastErr=false; return j;
-  }catch(e){ lastErr=true; throw e; }
-  finally{ inflight--; setConn(); }
+  try {
+    if(action==='load') {
+      const [book,days] = await Promise.all([getDocFromServer(bookRef),getDocsFromServer(daysRef)]);
+      const data=book.exists()?book.data():{};
+      initialized=!!data.initialized;
+      const out={};
+      days.forEach(d=>{const v=d.data(); if(!S.local[d.id]&&(v.revision||0)>=(revisions.get(d.id)||0))revisions.set(d.id,v.revision||0);out[d.id]=v.day;});
+      lastErr=false;
+      return {ok:true,students:data.students||[],groups:data.groups||[],days:out};
+    }
+    if(action==='saveDay') {
+      const date=payload.date;
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('日期格式不正確');
+      const ref=doc(daysRef,date), expected=revisions.get(date)||0;
+      const revision=await runTransaction(db,async tx=>{
+        const snap=await tx.get(ref), current=snap.exists()?(snap.data().revision||0):0;
+        if(current!==expected) throw {code:'conflict'};
+        tx.set(ref,{day:payload.day,revision:current+1,updatedAt:serverTimestamp()});
+        return current+1;
+      });
+      revisions.set(date,revision);
+    } else if(action==='saveStudents'||action==='deleteStudent'||action==='saveGroups') {
+      await runTransaction(db,async tx=>{
+        const snap=await tx.get(bookRef),data=snap.exists()?snap.data():{};
+        if(action==='saveGroups') {
+          const groups=(payload.groups||[]).slice(0,30).map(g=>({id:String(g.id),name:String(g.name).trim().slice(0,20)||'未命名'}));
+          tx.set(bookRef,{students:data.students||[],groups,initialized:!!data.initialized,updatedAt:serverTimestamp()},{merge:true});
+        } else {
+          const students=data.students||[];
+          const next=action==='deleteStudent'?students.filter(s=>s.key!==payload.key):[...students];
+          if(action==='saveStudents') for(const raw of payload.students||[]) {
+            const s=normalizeStudent(raw),i=next.findIndex(x=>x.key===s.key);
+            if(i<0) next.push(s); else next[i]=s;
+          }
+          tx.set(bookRef,{students:next,groups:data.groups||[],initialized:!!data.initialized,updatedAt:serverTimestamp()},{merge:true});
+        }
+      });
+    } else throw new Error('不支援的操作');
+    lastErr=false;return {ok:true};
+  } catch(e) {lastErr=true;throw e;}
+  finally {inflight--;setConn();}
+}
+async function importSemester(file) {
+  const data=JSON.parse(await file.text());
+  if(data.format!=='xs-rollbook-v1'||!Array.isArray(data.students)||data.students.length>300) throw new Error('匯入檔案格式不正確');
+  const students=data.students.map(normalizeStudent), entries=Object.entries(data.days||{});
+  if(entries.length>40||entries.some(([d])=>!/^\d{4}-\d{2}-\d{2}$/.test(d))) throw new Error('匯入日期格式不正確');
+  await runTransaction(db,async tx=>{
+    const snap=await tx.get(bookRef);
+    if(snap.exists()&&(snap.data().initialized||(snap.data().students||[]).length)) throw new Error('這份點名簿已有資料，為避免覆蓋，無法重複匯入。');
+    tx.set(bookRef,{students,groups:[],initialized:true,updatedAt:serverTimestamp()});
+    for(const [date,day] of entries) tx.set(doc(daysRef,date),{day,revision:1,updatedAt:serverTimestamp()});
+  });
+  await load();toast('名單與出缺席資料已匯入');
 }
 
 // ---------- helpers ----------
@@ -333,6 +403,7 @@ function fmt(n){return n>0?'+'+n:String(n);}
 // ---------- writes ----------
 const writing={},dirty={};
 function mutateDay(d,fn){
+  writeGeneration++;
   if(!guard()) return;
   const x=structuredClone(dayOf(d)); x.date=d; x.att=x.att||{}; x.pts=x.pts||{}; x.gpts=x.gpts||{}; x.log=x.log||[];
   fn(x); S.local[d]=x; render(); flush(d);
@@ -347,17 +418,18 @@ async function flush(d){
   writing[d]=false; render(); setConn();
 }
 function failed(e){
-  if(e?.code==='wrong_password'||e?.code==='change_password'){showSetup(ERR[e.code]);return;}
+  if(e?.code==='permission-denied'){showSetup(ERR[e.code]);return;}
+  if(e?.code==='conflict'){toast(ERR.conflict);return;}
   toast('沒存到：畫面上的資料會保留，連線恢復後自動補存');
 }
 function guard(){ if(!cfg){showSetup();return false;} return true; }
 const pendStu=new Set(),pendDel=new Set(); let stuBusy=false;
-function saveStu(key,patch){ if(!guard()) return;
+function saveStu(key,patch){ writeGeneration++; if(!guard()) return;
   const s=S.students.find(x=>x.key===key); if(!s) return; Object.assign(s,patch); pendStu.add(key); pumpStu(); }
-function createStu(data){ if(!guard()) return null;
+function createStu(data){ writeGeneration++; if(!guard()) return null;
   const key='n'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
   S.students.push({key,...data}); pendStu.add(key); pumpStu(); return key; }
-function removeStu(key){ if(!guard()) return; S.students=S.students.filter(x=>x.key!==key); pendStu.delete(key); pendDel.add(key); pumpStu(); }
+function removeStu(key){ writeGeneration++; if(!guard()) return; S.students=S.students.filter(x=>x.key!==key); pendStu.delete(key); pendDel.add(key); pumpStu(); }
 async function pumpStu(){
   if(stuBusy) return; stuBusy=true;
   try{
@@ -374,7 +446,7 @@ async function pumpStu(){
   stuBusy=false; setConn();
 }
 let groupsDirty=false,groupsBusy=false;
-function saveGroups(){ if(!guard()) return; groupsDirty=true; pumpGroups(); }
+function saveGroups(){ writeGeneration++; if(!guard()) return; groupsDirty=true; pumpGroups(); }
 async function pumpGroups(){
   if(groupsBusy) return; groupsBusy=true;
   try{ while(groupsDirty){ groupsDirty=false; await api('saveGroups',{groups:S.groups.map(({id,name})=>({id,name}))}); } }
@@ -385,18 +457,18 @@ function retryPending(){ for(const d of Object.keys(S.local)) flush(d); if(pendS
 let loading=false;
 async function load(quiet){
   if(!cfg){showSetup();return;}
-  if(loading) return; loading=true;
+  if(loading||inflight||stuBusy||groupsBusy) return; loading=true;
   if(!quiet&&!S.ready) $('#c-msg').textContent='連線中…';
   try{
-    const j=await api('load');
+    const generation=writeGeneration;const j=await api('load');if(generation!==writeGeneration){loading=false;return;}
     const mine=new Map(S.students.filter(s=>pendStu.has(s.key)).map(s=>[s.key,s]));
     const list=(j.students||[]).filter(s=>!pendDel.has(s.key)).map(s=>mine.get(s.key)||s);
     for(const [k,s] of mine) if(!list.some(x=>x.key===k)) list.push(s);
     S.students=list; S.days=j.days||{}; if(!groupsDirty&&!groupsBusy) S.groups=j.groups||[]; S.ready=true;
-    hideSetup(); render(); retryPending();
-    if(!quiet) toast('已從 Google 試算表載入');
+    hideSetup(); $('#initPanel').hidden=initialized; render(); retryPending();
+    if(!quiet) toast('已從 Firebase 載入');
   }catch(e){
-    if(e?.code==='wrong_password'||e?.code==='change_password') showSetup(ERR[e.code]);
+    if(e?.code==='permission-denied') showSetup(ERR[e.code]);
     else if(!S.ready) showSetup(ERR[e?.code]||ERR.network);
     else if(!quiet) toast(ERR[e?.code]||ERR.network);
   }
@@ -406,7 +478,7 @@ function showSetup(msg){
   const v=$('#v-setup'); v.hidden=false; v.style.display='flex';
   document.querySelector('.tabs').hidden=true;
   ['roll','groups','sheet','roster'].forEach(x=>{const el=$('#v-'+x);el.hidden=true;el.style.display='none';});
-  if(cfg?.url&&!$('#c-url').value) $('#c-url').value=cfg.url;
+  $('#initPanel').hidden=true;
   $('#c-msg').textContent=msg||''; setConn();
 }
 function hideSetup(){
@@ -514,12 +586,12 @@ function renderRoster(){
 }
 
 function setConn(){const c=$('#conn'); if(!c) return;
-  if(!cfg){c.className='pill warn';c.textContent='尚未連線';return;}
-  const pending=inflight>0||Object.keys(S.local).length>0||pendStu.size>0||pendDel.size>0||groupsDirty||groupsBusy;
+  if(!cfg){c.className='pill warn';c.textContent='尚未登入';return;}
+  const pending=inflight>0||Object.keys(S.local).length>0||pendStu.size>0||pendDel.size>0||groupsDirty||groupsBusy||stuBusy;
   if(lastErr&&pending){c.className='pill warn';c.textContent='連線失敗・有資料尚未存檔';}
   else if(lastErr){c.className='pill warn';c.textContent='連線失敗';}
   else if(pending){c.className='pill';c.textContent='儲存中…';}
-  else{c.className='pill ok';c.textContent='已存到 Google 試算表';}}
+  else{c.className='pill ok';c.textContent='已存到 Firebase';}}
 function render(){renderRoll(); if(S.tab==='groups')renderGroups(); if(S.tab==='sheet')renderSheet(); if(S.tab==='roster')renderRoster();}
 function showTab(t){S.tab=t;try{localStorage.setItem('xs-roll-tab',t)}catch(e){}
   document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t));
@@ -642,20 +714,43 @@ window.addEventListener('pointercancel',e=>endDrag(e,true));
 
 // ---------- boot ----------
 $('#c-go').onclick=async()=>{
-  const url=$('#c-url').value.trim(), token=$('#c-pw').value;
-  if(!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)){$('#c-msg').textContent='網址要是 https://script.google.com/…/exec 這種格式';return;}
-  if(!token){$('#c-msg').textContent='請輸入密碼';return;}
-  cfg={url,token}; try{localStorage.setItem(CFG_KEY,JSON.stringify(cfg));}catch(e){}
-  lastErr=false; $('#c-pw').value=''; await load();
+  $('#c-msg').textContent='正在開啟 Google 登入…';
+  try {
+    const provider=new GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});
+    await signInWithPopup(auth,provider);
+  } catch(e) {showSetup(ERR[e.code]||'登入失敗，請重試。');}
 };
-$('#c-pw').addEventListener('keydown',e=>{if(e.key==='Enter')$('#c-go').click();});
-$('#btnSetup').onclick=()=>showSetup();
+$('#btnSetup').onclick=()=>{
+  if(!cfg){showSetup();return;}
+  if(inflight||Object.keys(S.local).length||pendStu.size||pendDel.size||groupsDirty||stuBusy||groupsBusy){toast('請等待資料儲存完成後再登出');return;}
+  signOut(auth).catch(()=>toast('登出失敗，請重試'));
+};
 $('#btnReload').onclick=()=>load();
-showTab(S.tab);
-if(!cfg) showSetup(); else load(true);
+$('#importFile').onchange=async e=>{
+  const file=e.target.files[0];if(!file)return;
+  $('#importMsg').textContent='匯入中…';
+  try {await importSemester(file);$('#importMsg').textContent='匯入完成';}
+  catch(err){$('#importMsg').textContent=ERR[err.code]||err.message||'匯入失敗';}
+  e.target.value='';
+};
+showSetup('請使用老師的 Google 帳號登入。');
+onAuthStateChanged(auth,async user=>{
+  if(user&&user.emailVerified&&user.email?.toLowerCase()===OWNER_EMAIL){
+    cfg={uid:user.uid};$('#btnSetup').textContent='登出';lastErr=false;await load(true);
+  } else {
+    cfg=null;S.ready=false;S.students=[];S.groups=[];S.days={};S.local={};revisions.clear();
+    $('#initPanel').hidden=true;$('#cards').replaceChildren();$('#sheet').replaceChildren();$('#rosterTbl').replaceChildren();$('#board').replaceChildren();
+    $('#btnSetup').textContent=user?'切換帳號':'登入';
+    if(user) await signOut(auth);
+    showSetup(user?'此帳號沒有點名簿權限，請改用老師帳號登入。':'請使用老師的 Google 帳號登入。');
+  }
+});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S.ready)load(true);});
-setInterval(()=>{if(document.visibilityState==='visible'&&S.ready&&!inflight&&!document.activeElement?.closest?.('#rosterTbl,#dlg'))load(true);},90000);
+setInterval(()=>{if(document.visibilityState==='visible'&&S.ready&&!inflight&&!document.activeElement?.closest?.('#rosterTbl,#dlg,#board'))load(true);},90000);
 window.addEventListener('online',retryPending);
+window.addEventListener('beforeunload',e=>{
+  if(inflight||Object.keys(S.local).length||pendStu.size||pendDel.size||groupsDirty||stuBusy||groupsBusy){e.preventDefault();e.returnValue='';}
+});
 </script>
 </body>
 </html>

@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>足球無人機社 點名計分簿</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+body{margin:0}
+[hidden]{display:none!important}
+/* Layout: club register book — date strip + reason chips on top, student cards below; ledger table and roster editor on their own tabs */
+:root{
+  --bg:#f2f8fc; --card:#ffffff; --ink:#13202b; --muted:#5b6b79; --line:#d6e2ea; --soft:#f6fafc;
+  --accent:#0089bf; --accent-soft:#dff2fa;
+  --late:#b07800; --late-soft:#fff3d1; --leave:#4a62b8; --leave-soft:#e6ebfa; --abs:#c42f2f; --abs-soft:#fde5e3;
+  --plus:#16884a; --minus:#c42f2f;
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
+button,input,select,textarea{font:inherit;color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:20px 56px;display:flex;flex-direction:column;gap:16px}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:10px}
+.eyebrow{font-size:12px;letter-spacing:.14em;color:var(--muted);font-weight:500}
+h1{font-weight:900;font-size:clamp(26px,4.4vw,38px);margin:2px 0 0;line-height:1.15}
+.pill{font-size:12.5px;border-radius:99px;padding:3px 10px;border:1px solid var(--line);color:var(--muted);background:var(--card)}
+.pill.ok{color:var(--plus);border-color:currentColor}
+.pill.warn{color:var(--abs);border-color:currentColor}
+.tabs{display:flex;gap:4px;border-bottom:1.5px solid var(--line);overflow-x:auto}
+.tab{all:unset;cursor:pointer;padding:9px 14px;font-weight:700;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-1.5px;white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--ink);border-color:var(--accent)}
+.tab:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.bar{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.btn{all:unset;cursor:pointer;border:1.5px solid var(--line);border-radius:9px;padding:6px 12px;font-size:14px;font-weight:500;background:var(--card);white-space:nowrap}
+.btn:hover{border-color:var(--ink)} .btn:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+.btn.main{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.danger{color:var(--abs);border-color:var(--abs)}
+.btn[disabled]{opacity:.4;pointer-events:none}
+input[type=date]{border:1.5px solid var(--line);border-radius:9px;padding:5px 10px;background:var(--card);font-family:var(--f-mono);font-size:15px}
+.dow{font-weight:700}
+.counts{display:flex;flex-wrap:wrap;gap:6px;font-size:13.5px;margin-left:auto}
+.counts span{border-radius:99px;padding:2px 10px;background:var(--soft);font-variant-numeric:tabular-nums}
+.counts b{font-family:var(--f-mono)}
+.lab{font-size:13px;color:var(--muted);font-weight:500;margin-right:2px}
+.chip{all:unset;cursor:pointer;border:1.5px solid var(--line);border-radius:99px;padding:3px 11px;font-size:13.5px;background:var(--card)}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+.chip.custom{border-style:dashed;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(236px,1fr));gap:10px}
+.card{background:var(--card);border:1.5px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:9px;min-width:0}
+.card.T{background:var(--late-soft);border-color:var(--late)}
+.card.L{background:var(--leave-soft);border-color:var(--leave)}
+.card.A{background:var(--abs-soft);border-color:var(--abs)}
+.who{display:flex;align-items:baseline;gap:8px}
+.nm{font-weight:900;font-size:19px;letter-spacing:.06em}
+.meta{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.edit{all:unset;cursor:pointer;margin-left:auto;font-size:12.5px;color:var(--muted);padding:2px 8px;border-radius:7px;border:1px solid var(--line);background:var(--card)}
+.edit:hover{color:var(--ink);border-color:var(--ink)} .edit:focus-visible{outline:2px solid var(--accent)}
+.seg{display:grid;grid-template-columns:repeat(4,1fr);border:1.5px solid var(--line);border-radius:9px;overflow:hidden;background:var(--card)}
+.seg button{all:unset;cursor:pointer;text-align:center;font-size:13.5px;padding:6px 0;font-weight:500;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.seg button[aria-pressed="true"]{color:#fff;font-weight:700}
+.seg button[data-s="P"][aria-pressed="true"]{background:var(--accent)}
+.seg button[data-s="T"][aria-pressed="true"]{background:var(--late)}
+.seg button[data-s="L"][aria-pressed="true"]{background:var(--leave)}
+.seg button[data-s="A"][aria-pressed="true"]{background:var(--abs)}
+.sessions{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+@media (max-width:640px){.sessions{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.sess{all:unset;cursor:pointer;border:1.5px solid var(--line);border-radius:10px;padding:6px 8px;display:flex;flex-direction:column;align-items:center;gap:0;background:var(--card);position:relative}
+.sess small{font-size:11.5px;color:var(--muted);letter-spacing:.06em}
+.sess b{font-family:var(--f-mono);font-size:16px}
+.sess[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.sess[aria-pressed="true"] small{color:#fff}
+.sess:focus-visible{outline:3px solid var(--late);outline-offset:1px}
+.sess.done::after{content:"已點";position:absolute;top:-7px;right:-4px;font-size:10.5px;background:var(--plus);color:#fff;border-radius:99px;padding:0 6px}
+.sess.now{border-color:var(--accent)}
+.other{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.future{color:var(--line)}
+.score{display:flex;align-items:center;gap:8px}
+.pm{all:unset;cursor:pointer;width:38px;height:34px;border-radius:9px;display:grid;place-items:center;font-size:20px;font-weight:900;border:1.5px solid var(--line);background:var(--card)}
+.pm.p{color:var(--plus)} .pm.m{color:var(--minus)}
+.pm:hover{border-color:currentColor} .pm:active{transform:translateY(1px)} .pm:focus-visible{outline:3px solid var(--accent)}
+.today{font-family:var(--f-mono);font-weight:700;font-size:18px;min-width:44px;text-align:center;font-variant-numeric:tabular-nums}
+.today.pos{color:var(--plus)} .today.neg{color:var(--minus)}
+.total{margin-left:auto;text-align:right;font-size:12px;color:var(--muted);line-height:1.2}
+.total b{display:block;font-family:var(--f-mono);font-size:16px;color:var(--ink)}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.panel h2{font-size:16px;margin:0}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.log{display:flex;flex-direction:column;gap:4px;font-size:14px}
+.log div{display:flex;gap:10px;align-items:center;border-top:1px dashed var(--line);padding-top:4px}
+.log .d{font-family:var(--f-mono);font-weight:700;min-width:28px}
+.log .t{font-family:var(--f-mono);color:var(--muted);font-size:12px}
+.log button{all:unset;cursor:pointer;margin-left:auto;font-size:12.5px;color:var(--muted)}
+.log button:hover{color:var(--abs)}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;font-size:14px;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:6px 9px;border-bottom:1px solid var(--line);text-align:center;white-space:nowrap}
+th{font-size:12.5px;color:var(--muted);font-weight:700;background:var(--soft);position:sticky;top:0}
+td.l,th.l{text-align:left}
+.sticky{position:sticky;left:0;background:var(--card);z-index:1}
+th.sticky{background:var(--soft);z-index:2}
+.cell{display:inline-flex;gap:3px;align-items:baseline}
+.sym{font-weight:700}
+.sym.T{color:var(--late)} .sym.L{color:var(--leave)} .sym.A{color:var(--abs)} .sym.P{color:var(--muted);font-weight:400}
+.pt{font-family:var(--f-mono);font-size:11.5px} .pt.pos{color:var(--plus)} .pt.neg{color:var(--minus)}
+tr.off td{opacity:.5}
+.mono{font-family:var(--f-mono)}
+.ed input{width:100%;min-width:56px;border:1px solid transparent;border-radius:6px;padding:4px 6px;background:transparent;text-align:inherit}
+.ed input:hover{border-color:var(--line)}
+.ed input:focus{border-color:var(--accent);background:var(--card);outline:none}
+.ed td{padding:3px 5px}
+.ed .nmc input{font-weight:700;min-width:84px}
+textarea{width:100%;min-height:150px;font-family:var(--f-mono);font-size:13px;border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--soft)}
+label.opt{display:flex;gap:6px;align-items:center;font-size:14px;cursor:pointer}
+.state{padding:40px 16px;text-align:center;color:var(--muted)}
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);padding:18px;width:min(380px,calc(100vw - 32px))}
+dialog::backdrop{background:rgba(10,20,28,.45)}
+.form{display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center}
+.form label{font-size:13.5px;color:var(--muted)}
+.form input{border:1.5px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--soft);width:100%}
+.form input:focus{outline:none;border-color:var(--accent)}
+.gscore{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.gcard{background:var(--card);border:1.5px solid var(--line);border-top:5px solid var(--gc);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.gcard .gn{font-weight:900;font-size:17px;color:var(--gc)}
+.gcard .gm{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gtag{font-size:11.5px;font-weight:700;color:var(--gc);border:1px solid var(--gc);border-radius:99px;padding:0 7px;white-space:nowrap}
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;align-items:start}
+.gcol{--gc:var(--muted);background:var(--card);border:1.5px solid var(--line);border-top:5px solid var(--gc);border-radius:12px;display:flex;flex-direction:column;min-height:130px;min-width:0;transition:border-color .12s,background .12s}
+.gcol.over,.gcol.target{border-color:var(--gc);background:color-mix(in srgb,var(--gc) 9%,var(--card))}
+.gcol.target{cursor:pointer}
+.ghead{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line)}
+.ghead input{flex:1;min-width:0;border:1px solid transparent;border-radius:6px;padding:3px 6px;font-weight:900;font-size:16px;background:transparent;color:var(--gc)}
+.ghead input:hover{border-color:var(--line)} .ghead input:focus{border-color:var(--accent);outline:none;background:var(--card)}
+.ghead .ttl{flex:1;font-weight:900;font-size:16px;color:var(--muted);padding:3px 6px}
+.ghead .n{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.gdel{all:unset;cursor:pointer;font-size:12px;color:var(--muted);padding:2px 6px;border-radius:6px}
+.gdel:hover{color:var(--abs)} .gdel:focus-visible{outline:2px solid var(--accent)}
+.gbody{display:flex;flex-direction:column;gap:6px;padding:8px;flex:1}
+.gchip{display:flex;align-items:baseline;gap:6px;padding:7px 10px;border:1.5px solid var(--line);border-radius:9px;background:var(--soft);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.gchip b{font-size:15px;letter-spacing:.04em}
+.gchip.sel{border-color:var(--accent);background:var(--accent-soft)}
+.gchip.dragging{opacity:.35}
+.gchip:focus-visible{outline:3px solid var(--accent)}
+.ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:20;box-shadow:0 10px 26px rgba(19,32,43,.2);background:var(--card);cursor:grabbing}
+.gempty{font-size:13px;color:var(--muted);text-align:center;padding:12px 0}
+select{border:1px solid var(--line);border-radius:6px;padding:4px 6px;background:var(--card)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:99px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">香山高中 · 足球無人機社</div>
+      <h1>點名計分簿</h1>
+    </div>
+    <div class="row">
+      <span class="pill" id="conn">連線中…</span>
+      <button class="btn" id="btnReload">重新載入</button>
+      <button class="btn" id="btnSetup">連線設定</button>
+    </div>
+  </header>
+
+  <section id="v-setup" class="panel" hidden style="max-width:600px">
+    <h2>連線到你的 Google 試算表</h2>
+    <p class="hint">每台裝置第一次使用時填一次，之後會記住。網址和密碼只存在這台裝置的瀏覽器裡，不會出現在網頁程式碼中。</p>
+    <div class="form">
+      <label for="c-url">Apps Script 網址</label><input id="c-url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
+      <label for="c-pw">密碼</label><input id="c-pw" type="password" autocomplete="current-password">
+    </div>
+    <div class="row"><button class="btn main" id="c-go">連線</button><span class="hint" id="c-msg"></span></div>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" data-tab="roll" aria-selected="true">點名・計分</button>
+    <button class="tab" role="tab" data-tab="groups" aria-selected="false">分組</button>
+    <button class="tab" role="tab" data-tab="sheet" aria-selected="false">學期總表</button>
+    <button class="tab" role="tab" data-tab="roster" aria-selected="false">名單管理</button>
+  </nav>
+
+  <!-- 點名計分 -->
+  <section id="v-roll" style="display:flex;flex-direction:column;gap:12px">
+    <div class="bar">
+      <div class="row">
+        <div class="sessions" id="sessions" style="flex:1 1 100%"></div>
+        <span class="dow" id="dow"></span>
+        <label class="other" for="date">補課／其他日期 <input type="date" id="date"></label>
+        <div class="counts" id="counts"></div>
+      </div>
+      <div class="row" id="reasons"></div>
+    </div>
+    <div class="panel" id="gpanel" hidden>
+      <div class="row"><h2>組別分數</h2><span class="hint">按 + 或 − 幫整組加減分，原因同樣套用上方選的原因</span></div>
+      <div class="gscore" id="gscore"></div>
+    </div>
+    <div class="row" id="sortRow" hidden><span class="lab">同學排列</span><button class="chip" data-sort="seat">依班級座號</button><button class="chip" data-sort="group">依組別</button></div>
+    <div class="cards" id="cards"><div class="state">正在讀取名單…</div></div>
+    <div class="panel">
+      <div class="row"><h2>本日加減分紀錄</h2><span class="hint" id="logHint"></span></div>
+      <div class="log" id="log"></div>
+    </div>
+  </section>
+
+  <!-- 分組 -->
+  <section id="v-groups" hidden style="flex-direction:column;gap:12px">
+    <div class="bar">
+      <div class="row">
+        <button class="btn main" id="addGroup">＋ 新增組別</button>
+        <span class="other" id="makeWrap">或一次建立 <input type="number" id="nGroups" min="2" max="12" value="4" aria-label="組數" style="width:64px;border:1.5px solid var(--line);border-radius:8px;padding:4px 8px;background:var(--card)"> 組 <button class="btn" id="makeGroups">建立</button></span>
+      </div>
+      <p class="hint">整學期固定分組。拖曳同學卡片到其他組即可換組；手機上也可以先點一下同學，再點要去的組。點組名可以改名字。</p>
+    </div>
+    <div class="board" id="board"></div>
+  </section>
+
+  <!-- 學期總表 -->
+  <section id="v-sheet" hidden style="flex-direction:column;gap:12px">
+    <div class="panel">
+      <div class="row"><h2>學期總表</h2>
+        <span class="hint">空白＝出席　<b class="sym T">Ø</b> 遲到　<b class="sym L">假</b> 請假　<b class="sym A">曠</b> 曠課　小數字＝當天得分</span>
+        <button class="btn" id="copyCsv" style="margin-left:auto">複製成表格（可貼到 Excel）</button>
+      </div>
+      <div class="scroll"><table id="sheet"></table></div>
+    </div>
+    <div class="panel" id="gsheetPanel" hidden>
+      <h2>組別分數</h2>
+      <div class="scroll"><table id="gsheet"></table></div>
+    </div>
+  </section>
+
+  <!-- 名單管理 -->
+  <section id="v-roster" hidden style="flex-direction:column;gap:12px">
+    <div class="panel">
+      <div class="row"><h2>名單</h2><span class="hint">直接點格子修改，離開格子就會存檔。退社的同學會從點名頁隱藏，但舊紀錄保留。</span></div>
+      <div class="scroll"><table class="ed" id="rosterTbl"></table></div>
+      <div class="row"><button class="btn main" id="addStu">＋ 新增一位同學</button></div>
+    </div>
+    <div class="panel">
+      <h2>整批貼上新名單</h2>
+      <p class="hint">從學校名單複製貼上，一行一位：班級 座號 學號 姓名（空白或 Tab 分隔都可以）。同一個學號會更新姓名、班級、座號；新學號會新增。</p>
+      <textarea id="bulk" spellcheck="false" placeholder="1001 01 1150001 王小明（範例）"></textarea>
+      <label class="opt"><input type="checkbox" id="bulkDrop"> 名單裡沒有的同學標記為「退社」</label>
+      <div class="row"><button class="btn main" id="bulkGo">套用名單</button><span class="hint" id="bulkMsg"></span></div>
+    </div>
+  </section>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlgForm" style="display:flex;flex-direction:column;gap:14px">
+    <strong style="font-size:17px">修改同學資料</strong>
+    <div class="form">
+      <label for="f-name">姓名</label><input id="f-name" required>
+      <label for="f-cls">班級</label><input id="f-cls" inputmode="numeric">
+      <label for="f-seat">座號</label><input id="f-seat" inputmode="numeric">
+      <label for="f-sid">學號</label><input id="f-sid" inputmode="numeric">
+    </div>
+    <label class="opt"><input type="checkbox" id="f-off"> 已退社（從點名頁隱藏）</label>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn" value="cancel" formnovalidate>取消</button>
+      <button class="btn main" value="ok">儲存</button>
+    </div>
+  </form>
+</dialog>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const TZ='Asia/Taipei';
+const todayStr=()=>new Date().toLocaleDateString('sv-SE',{timeZone:TZ});
+const STAT={P:'出席',T:'遲到',L:'請假',A:'曠課'};
+const SYM={P:'',T:'Ø',L:'假',A:'曠'};
+const REASONS=['表現優良','協助器材','完成任務','團隊合作','不專心','違規飛行','未收器材'];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const SESSIONS=['2026-10-01','2026-10-15','2026-11-05','2026-11-12','2026-12-10','2027-01-07'];
+function defaultDate(){const t=todayStr(); if(SESSIONS.includes(t)) return t; const past=SESSIONS.filter(d=>d<t); return past.length?past[past.length-1]:SESSIONS[0];}
+const S={students:[],groups:[],days:{},local:{},date:defaultDate(),reason:'',tab:'roll',ready:false,sortBy:'seat',sel:null};
+try{const v=localStorage.getItem('xs-roll-sort'); if(v) S.sortBy=v;}catch(e){}
+const GC=['#0089bf','#d1287a','#d97a00','#16884a','#7a4fd0','#c42f2f','#00897b','#8a6d3b','#3d5afe','#6b7c8a'];
+try{const t=localStorage.getItem('xs-roll-tab'); if(t) S.tab=t;}catch(e){}
+// ---------- Google 試算表連線 ----------
+const CFG_KEY='xs-roll-cfg';
+let cfg=null; try{cfg=JSON.parse(localStorage.getItem(CFG_KEY)||'null');}catch(e){}
+let inflight=0,lastErr=false;
+const ERR={wrong_password:'密碼不對，請重新輸入',change_password:'請先在 Apps Script 程式碼最上面把 PASSWORD 改成你自己的密碼，並重新部署',
+  network:'連不到試算表。請確認網址是 /exec 結尾，而且部署時「誰可以存取」選了「所有人」',busy:'試算表忙碌中，稍後會自動重試',server:'試算表發生錯誤'};
+async function api(action,payload={}){
+  inflight++; setConn();
+  try{
+    let r,j;
+    try{ r=await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,token:cfg.token,...payload})}); }
+    catch(e){ throw {code:'network'}; }
+    if(!r.ok) throw {code:'network'};
+    try{ j=await r.json(); }catch(e){ throw {code:'network'}; }
+    if(!j.ok) throw {code:j.error||'server'};
+    lastErr=false; return j;
+  }catch(e){ lastErr=true; throw e; }
+  finally{ inflight--; setConn(); }
+}
+
+// ---------- helpers ----------
+function sortStu(a,b){return (a.cls||'').localeCompare(b.cls||'')||(+a.seat||0)-(+b.seat||0)||(a.name||'').localeCompare(b.name||'');}
+const active=()=>S.students.filter(s=>s.active!==false).sort(sortStu);
+function dayOf(d){return S.local[d]||S.days[d]||{date:d,att:{},pts:{},gpts:{},log:[]};}
+const gIdx=id=>S.groups.findIndex(g=>g.id===id);
+const gColor=id=>{const i=gIdx(id);return i<0?'var(--muted)':GC[i%GC.length];};
+const gName=id=>S.groups.find(g=>g.id===id)?.name||'';
+function gTotal(id){let p=0;for(const d of countedDates())p+=(dayOf(d).gpts?.[id]||0);return p;}
+function hasData(d){const x=dayOf(d);return !!(Object.keys(x.att||{}).length||Object.keys(x.pts||{}).length||Object.keys(x.gpts||{}).length||(x.log||[]).length);}
+function recorded(){return [...new Set([...Object.keys(S.days),...Object.keys(S.local)])].filter(hasData);}
+// columns in the ledger: the six club sessions plus any make-up day that has records
+function allDates(){return [...new Set([...SESSIONS,...recorded()])].sort();}
+// days that count toward totals: anything recorded, plus scheduled sessions that have already happened
+function countedDates(){const t=todayStr();return [...new Set([...recorded(),...SESSIONS.filter(d=>d<=t)])].sort();}
+const isFuture=d=>d>todayStr()&&!hasData(d);
+function totals(k){let pts=0,c={P:0,T:0,L:0,A:0};
+  for(const d of countedDates()){const x=dayOf(d); pts+=(x.pts?.[k]||0); c[x.att?.[k]||'P']++;}
+  return {pts,c};}
+function dow(d){return '週'+'日一二三四五六'[new Date(d+'T12:00:00').getDay()];}
+let tt;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),2400);}
+function fmt(n){return n>0?'+'+n:String(n);}
+
+// ---------- writes ----------
+const writing={},dirty={};
+function mutateDay(d,fn){
+  if(!guard()) return;
+  const x=structuredClone(dayOf(d)); x.date=d; x.att=x.att||{}; x.pts=x.pts||{}; x.gpts=x.gpts||{}; x.log=x.log||[];
+  fn(x); S.local[d]=x; render(); flush(d);
+}
+async function flush(d){
+  if(writing[d]){dirty[d]=true;return;}
+  writing[d]=true;
+  try{
+    do{ dirty[d]=false; const snap=JSON.parse(JSON.stringify(S.local[d])); await api('saveDay',{date:d,day:snap}); S.days[d]=snap; }while(dirty[d]);
+    delete S.local[d];
+  }catch(e){ failed(e); }
+  writing[d]=false; render(); setConn();
+}
+function failed(e){
+  if(e?.code==='wrong_password'||e?.code==='change_password'){showSetup(ERR[e.code]);return;}
+  toast('沒存到：畫面上的資料會保留，連線恢復後自動補存');
+}
+function guard(){ if(!cfg){showSetup();return false;} return true; }
+const pendStu=new Set(),pendDel=new Set(); let stuBusy=false;
+function saveStu(key,patch){ if(!guard()) return;
+  const s=S.students.find(x=>x.key===key); if(!s) return; Object.assign(s,patch); pendStu.add(key); pumpStu(); }
+function createStu(data){ if(!guard()) return null;
+  const key='n'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+  S.students.push({key,...data}); pendStu.add(key); pumpStu(); return key; }
+function removeStu(key){ if(!guard()) return; S.students=S.students.filter(x=>x.key!==key); pendStu.delete(key); pendDel.add(key); pumpStu(); }
+async function pumpStu(){
+  if(stuBusy) return; stuBusy=true;
+  try{
+    while(pendStu.size||pendDel.size){
+      if(pendStu.size){
+        const keys=[...pendStu]; pendStu.clear();
+        const list=keys.map(k=>S.students.find(s=>s.key===k)).filter(Boolean)
+          .map(({key,cls,seat,sid,name,active,group})=>({key,cls:cls||'',seat:seat||'',sid:sid||'',name:name||'',active:active!==false,group:group||''}));
+        try{ if(list.length) await api('saveStudents',{students:list}); }catch(e){ keys.forEach(k=>pendStu.add(k)); throw e; }
+      }
+      for(const k of [...pendDel]){ await api('deleteStudent',{key:k}); pendDel.delete(k); }
+    }
+  }catch(e){ failed(e); }
+  stuBusy=false; setConn();
+}
+let groupsDirty=false,groupsBusy=false;
+function saveGroups(){ if(!guard()) return; groupsDirty=true; pumpGroups(); }
+async function pumpGroups(){
+  if(groupsBusy) return; groupsBusy=true;
+  try{ while(groupsDirty){ groupsDirty=false; await api('saveGroups',{groups:S.groups.map(({id,name})=>({id,name}))}); } }
+  catch(e){ groupsDirty=true; failed(e); }
+  groupsBusy=false; setConn();
+}
+function retryPending(){ for(const d of Object.keys(S.local)) flush(d); if(pendStu.size||pendDel.size) pumpStu(); if(groupsDirty) pumpGroups(); }
+let loading=false;
+async function load(quiet){
+  if(!cfg){showSetup();return;}
+  if(loading) return; loading=true;
+  if(!quiet&&!S.ready) $('#c-msg').textContent='連線中…';
+  try{
+    const j=await api('load');
+    const mine=new Map(S.students.filter(s=>pendStu.has(s.key)).map(s=>[s.key,s]));
+    const list=(j.students||[]).filter(s=>!pendDel.has(s.key)).map(s=>mine.get(s.key)||s);
+    for(const [k,s] of mine) if(!list.some(x=>x.key===k)) list.push(s);
+    S.students=list; S.days=j.days||{}; if(!groupsDirty&&!groupsBusy) S.groups=j.groups||[]; S.ready=true;
+    hideSetup(); render(); retryPending();
+    if(!quiet) toast('已從 Google 試算表載入');
+  }catch(e){
+    if(e?.code==='wrong_password'||e?.code==='change_password') showSetup(ERR[e.code]);
+    else if(!S.ready) showSetup(ERR[e?.code]||ERR.network);
+    else if(!quiet) toast(ERR[e?.code]||ERR.network);
+  }
+  loading=false;
+}
+function showSetup(msg){
+  const v=$('#v-setup'); v.hidden=false; v.style.display='flex';
+  document.querySelector('.tabs').hidden=true;
+  ['roll','groups','sheet','roster'].forEach(x=>{const el=$('#v-'+x);el.hidden=true;el.style.display='none';});
+  if(cfg?.url&&!$('#c-url').value) $('#c-url').value=cfg.url;
+  $('#c-msg').textContent=msg||''; setConn();
+}
+function hideSetup(){
+  const v=$('#v-setup'); if(v.hidden) return;
+  v.hidden=true; v.style.display='none'; document.querySelector('.tabs').hidden=false; showTab(S.tab);
+}
+
+// ---------- render: roll ----------
+function renderRoll(){
+  $('#date').value=S.date;
+  const si=SESSIONS.indexOf(S.date), t=todayStr();
+  $('#dow').textContent=(si>=0?`第 ${si+1} 次社課　`:'補課　')+S.date.slice(5).replace('-','/')+' '+dow(S.date);
+  $('#sessions').innerHTML=SESSIONS.map((d,i)=>`<button class="sess${hasData(d)?' done':''}${d===t?' now':''}" data-date="${d}" aria-pressed="${S.date===d}"><small>第 ${i+1} 次${d===t?'・今天':''}</small><b>${+d.slice(5,7)}/${+d.slice(8)}</b></button>`).join('');
+  const day=dayOf(S.date), list=active();
+  const c={P:0,T:0,L:0,A:0}; list.forEach(s=>c[day.att[s.key]||'P']++);
+  $('#counts').innerHTML=`<span>在籍 <b>${list.length}</b></span><span>出席 <b>${c.P+c.T}</b></span><span class="sym T">遲到 <b>${c.T}</b></span><span class="sym L">請假 <b>${c.L}</b></span><span class="sym A">曠課 <b>${c.A}</b></span>`;
+  $('#reasons').innerHTML=`<span class="lab">加減分原因</span>`+['',...REASONS].map(r=>`<button class="chip" data-r="${esc(r)}" aria-pressed="${S.reason===r}">${r||'不填'}</button>`).join('')+
+    (S.reason&&!REASONS.includes(S.reason)?`<button class="chip" data-r="${esc(S.reason)}" aria-pressed="true">${esc(S.reason)}</button>`:'')+
+    `<button class="chip custom" id="customR">＋自訂</button>`;
+  if(!S.ready){return;}
+  const hasG=S.groups.length>0;
+  $('#gpanel').hidden=!hasG; $('#sortRow').hidden=!hasG;
+  document.querySelectorAll('#sortRow [data-sort]').forEach(b=>b.setAttribute('aria-pressed',S.sortBy===b.dataset.sort));
+  if(hasG) $('#gscore').innerHTML=S.groups.map(g=>{const mem=list.filter(s=>s.group===g.id),p=day.gpts?.[g.id]||0;
+    return `<div class="gcard" data-g="${g.id}" style="--gc:${gColor(g.id)}"><div class="row" style="gap:6px"><span class="gn">${esc(g.name)}</span><span class="meta">${mem.length} 人</span></div>
+      <div class="gm">${mem.map(s=>esc(s.name)).join('、')||'還沒有組員'}</div>
+      <div class="score"><button class="pm m" data-gd="-1" aria-label="${esc(g.name)} 扣一分">−</button><span class="today ${p>0?'pos':p<0?'neg':''}">${fmt(p)}</span><button class="pm p" data-gd="1" aria-label="${esc(g.name)} 加一分">+</button>
+      <span class="total">學期累計<b>${fmt(gTotal(g.id))}</b></span></div></div>`;}).join('');
+  if(hasG&&S.sortBy==='group') list.sort((a,b)=>{const ia=gIdx(a.group),ib=gIdx(b.group);return (ia<0?999:ia)-(ib<0?999:ib)||sortStu(a,b);});
+  if(!list.length){$('#cards').innerHTML=`<div class="state">還沒有名單。到「名單管理」新增同學，或整批貼上學校名單。</div>`;}
+  else $('#cards').innerHTML=list.map(s=>{
+    const st=day.att[s.key]||'P', p=day.pts[s.key]||0, tot=totals(s.key).pts;
+    return `<div class="card ${st}" data-k="${s.key}">
+      <div class="who"><span class="nm">${esc(s.name)}</span><span class="meta">${esc(s.cls)}-${esc(s.seat)}</span>${s.group&&gName(s.group)?`<span class="gtag" style="--gc:${gColor(s.group)}">${esc(gName(s.group))}</span>`:''}<button class="edit" data-edit="${s.key}" aria-label="修改 ${esc(s.name)} 的資料">修改</button></div>
+      <div class="seg" role="group" aria-label="出缺席">${Object.keys(STAT).map(k=>`<button data-s="${k}" aria-pressed="${st===k}">${STAT[k]}</button>`).join('')}</div>
+      <div class="score"><button class="pm m" data-d="-1" aria-label="${esc(s.name)} 扣一分">−</button><span class="today ${p>0?'pos':p<0?'neg':''}">${fmt(p)}</span><button class="pm p" data-d="1" aria-label="${esc(s.name)} 加一分">+</button>
+        <span class="total">學期累計<b>${fmt(tot)}</b></span></div></div>`;}).join('');
+  const log=day.log||[];
+  $('#logHint').textContent=log.length?`共 ${log.length} 筆，按「撤銷」可收回`:'';
+  $('#log').innerHTML=log.length?log.map((e,i)=>({e,i})).reverse().map(({e,i})=>{const s=S.students.find(x=>x.key===e.k);
+    const who=e.g?`<span class="gtag" style="--gc:${gColor(e.g)}">${esc(gName(e.g)||'已刪除的組')}</span>`:`<b>${esc(s?.name||'（已刪除）')}</b>`;
+    return `<div><span class="d ${e.d>0?'pt pos':'pt neg'}">${fmt(e.d)}</span>${who}<span>${esc(e.r||'')}</span><span class="t">${(e.t||'').slice(11,16)}</span><button data-undo="${i}">撤銷</button></div>`}).join('')
+    :'<p class="hint">這天還沒有加減分。先選原因（可不選），再按同學或組別的 + 或 −。</p>';
+}
+
+// ---------- render: sheet ----------
+function renderSheet(){
+  const dates=allDates(), stus=[...S.students].sort((a,b)=>(a.active===false)-(b.active===false)||sortStu(a,b));
+  if(!S.ready){$('#sheet').innerHTML='';return;}
+  let h=`<thead><tr><th class="l sticky">姓名</th><th>班級</th><th>座號</th><th>組別</th>${dates.map(d=>{const i=SESSIONS.indexOf(d);return `<th>${i>=0?'第'+(i+1)+'次':'補課'}<br><span class="mono">${+d.slice(5,7)}/${+d.slice(8)}</span></th>`}).join('')}<th>出席</th><th>遲到</th><th>請假</th><th>曠課</th><th>總分</th></tr></thead><tbody>`;
+  for(const s of stus){const t=totals(s.key);
+    h+=`<tr class="${s.active===false?'off':''}"><td class="l sticky"><b>${esc(s.name)}</b>${s.active===false?' <span class="hint">退社</span>':''}</td><td class="mono">${esc(s.cls)}</td><td class="mono">${esc(s.seat)}</td><td>${s.group&&gName(s.group)?`<span class="gtag" style="--gc:${gColor(s.group)}">${esc(gName(s.group))}</span>`:''}</td>`+
+      dates.map(d=>{if(isFuture(d))return '<td class="future">·</td>';const x=dayOf(d),st=x.att?.[s.key]||'P',p=x.pts?.[s.key]||0;
+        return `<td><span class="cell"><span class="sym ${st}">${SYM[st]}</span>${p?`<span class="pt ${p>0?'pos':'neg'}">${fmt(p)}</span>`:''}</span></td>`}).join('')+
+      `<td class="mono">${t.c.P+t.c.T}/${countedDates().length}</td><td class="mono">${t.c.T||''}</td><td class="mono">${t.c.L||''}</td><td class="mono">${t.c.A||''}</td><td class="mono"><b>${fmt(t.pts)}</b></td></tr>`;}
+  $('#sheet').innerHTML=h+'</tbody>';
+  $('#gsheetPanel').hidden=!S.groups.length;
+  if(S.groups.length){
+    let g=`<thead><tr><th class="l sticky">組別</th><th>人數</th>${dates.map(d=>{const i=SESSIONS.indexOf(d);return `<th>${i>=0?'第'+(i+1)+'次':'補課'}<br><span class="mono">${+d.slice(5,7)}/${+d.slice(8)}</span></th>`}).join('')}<th>組別分數</th><th>成員個人分數合計</th></tr></thead><tbody>`;
+    for(const gr of S.groups){const mem=S.students.filter(s=>s.group===gr.id&&s.active!==false);
+      g+=`<tr><td class="l sticky"><span class="gtag" style="--gc:${gColor(gr.id)}">${esc(gr.name)}</span></td><td class="mono">${mem.length}</td>`+
+        dates.map(d=>{if(isFuture(d))return '<td class="future">·</td>';const p=dayOf(d).gpts?.[gr.id]||0;return `<td>${p?`<span class="pt ${p>0?'pos':'neg'}">${fmt(p)}</span>`:''}</td>`}).join('')+
+        `<td class="mono"><b>${fmt(gTotal(gr.id))}</b></td><td class="mono">${fmt(mem.reduce((a,s)=>a+totals(s.key).pts,0))}</td></tr>`;}
+    $('#gsheet').innerHTML=g+'</tbody>';
+  }
+}
+
+// ---------- render: groups board ----------
+let boardPending=false;
+function renderGroups(){
+  if(document.activeElement?.closest?.('#board')&&document.activeElement.matches('input')){boardPending=true;return;}
+  boardPending=false;
+  $('#makeWrap').hidden=S.groups.length>0;
+  if(!S.ready){$('#board').innerHTML='';return;}
+  const list=active();
+  const col=(id,title,editable)=>{const mem=list.filter(s=>(s.group&&gIdx(s.group)>=0?s.group:'')===id);
+    return `<div class="gcol${S.sel?' target':''}" data-g="${id}" style="--gc:${id?gColor(id):'var(--muted)'}">
+      <div class="ghead">${editable?`<input id="gn-${id}" data-gname="${id}" value="${esc(title)}" aria-label="組名">`:`<span class="ttl">${title}</span>`}<span class="n">${mem.length} 人</span>${editable?`<button class="gdel" data-gdel="${id}">刪除</button>`:''}</div>
+      <div class="gbody">${mem.map(s=>`<div class="gchip${S.sel===s.key?' sel':''}" data-k="${s.key}" tabindex="0" role="button" aria-label="${esc(s.name)}，按一下選取後點要去的組"><b>${esc(s.name)}</b><span class="meta">${esc(s.cls)}-${esc(s.seat)}</span></div>`).join('')||`<div class="gempty">${id?'把同學拖到這裡':'所有人都分好組了'}</div>`}</div></div>`;};
+  $('#board').innerHTML=(S.groups.length?'':'<div class="state" style="grid-column:1/-1">還沒有組別。按「新增組別」或一次建立幾組，再把同學拖進去。</div>')+
+    col('','未分組',false)+S.groups.map(g=>col(g.id,g.name,true)).join('');
+}
+function newGroupId(){return 'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
+function nextGroupName(){let n=1;while(S.groups.some(g=>g.name===`第${n}組`))n++;return `第${n}組`;}
+function moveTo(key,gid){const s=S.students.find(x=>x.key===key);S.sel=null;if(document.activeElement?.closest?.('#board'))document.activeElement.blur();
+  if(!s||(s.group||'')===gid){render();return;}
+  saveStu(key,{group:gid});render();toast(`${s.name} → ${gid?gName(gid):'未分組'}`);}
+
+// ---------- render: roster ----------
+let rosterPending=false;
+function renderRoster(){
+  if(document.activeElement?.closest?.('#rosterTbl')){rosterPending=true;return;}
+  rosterPending=false;
+  const stus=[...S.students].sort((a,b)=>(a.active===false)-(b.active===false)||sortStu(a,b));
+  $('#rosterTbl').innerHTML=`<thead><tr><th>班級</th><th>座號</th><th>學號</th><th class="l">姓名</th><th>組別</th><th>狀態</th><th></th></tr></thead><tbody>`+
+    (S.ready&&!stus.length?'<tr><td colspan="7" class="state">還沒有同學</td></tr>':'')+
+    stus.map(s=>`<tr data-k="${s.key}" class="${s.active===false?'off':''}">
+      <td><input id="r-${s.key}-cls" data-f="cls" value="${esc(s.cls)}" inputmode="numeric" aria-label="班級"></td>
+      <td><input id="r-${s.key}-seat" data-f="seat" value="${esc(s.seat)}" inputmode="numeric" aria-label="座號"></td>
+      <td><input id="r-${s.key}-sid" data-f="sid" value="${esc(s.sid)}" inputmode="numeric" aria-label="學號" class="mono"></td>
+      <td class="l nmc"><input id="r-${s.key}-name" data-f="name" value="${esc(s.name)}" aria-label="姓名"></td>
+      <td><select id="r-${s.key}-group" data-f="group" aria-label="組別"><option value="">未分組</option>${S.groups.map(g=>`<option value="${g.id}"${s.group===g.id?' selected':''}>${esc(g.name)}</option>`).join('')}</select></td>
+      <td><button class="btn" data-toggle="1">${s.active===false?'已退社':'在籍'}</button></td>
+      <td><button class="btn danger" data-del="1">刪除</button></td></tr>`).join('')+'</tbody>';
+}
+
+function setConn(){const c=$('#conn'); if(!c) return;
+  if(!cfg){c.className='pill warn';c.textContent='尚未連線';return;}
+  const pending=inflight>0||Object.keys(S.local).length>0||pendStu.size>0||pendDel.size>0||groupsDirty||groupsBusy;
+  if(lastErr&&pending){c.className='pill warn';c.textContent='連線失敗・有資料尚未存檔';}
+  else if(lastErr){c.className='pill warn';c.textContent='連線失敗';}
+  else if(pending){c.className='pill';c.textContent='儲存中…';}
+  else{c.className='pill ok';c.textContent='已存到 Google 試算表';}}
+function render(){renderRoll(); if(S.tab==='groups')renderGroups(); if(S.tab==='sheet')renderSheet(); if(S.tab==='roster')renderRoster();}
+function showTab(t){S.tab=t;try{localStorage.setItem('xs-roll-tab',t)}catch(e){}
+  document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t));
+  ['roll','groups','sheet','roster'].forEach(v=>{const el=$('#v-'+v);el.hidden=v!==t;el.style.display=v===t?'flex':'none';});
+  render();}
+
+// ---------- events ----------
+document.querySelector('.tabs').onclick=e=>{const b=e.target.closest('.tab');if(b)showTab(b.dataset.tab);};
+$('#date').onchange=e=>{if(e.target.value){S.date=e.target.value;render();}};
+$('#sessions').onclick=e=>{const b=e.target.closest('[data-date]');if(b){S.date=b.dataset.date;render();}};
+$('#reasons').onclick=e=>{
+  if(e.target.id==='customR'){const box=document.createElement('input');box.placeholder='輸入原因後按 Enter';box.className='chip';box.style.cursor='text';box.style.minWidth='140px';
+    e.target.replaceWith(box);box.focus();box.onkeydown=k=>{if(k.key==='Enter'){S.reason=box.value.trim();renderRoll();}if(k.key==='Escape')renderRoll();};box.onblur=()=>setTimeout(renderRoll,150);return;}
+  const b=e.target.closest('[data-r]');if(!b)return;S.reason=b.dataset.r;renderRoll();};
+$('#cards').onclick=e=>{
+  const card=e.target.closest('.card');if(!card)return;const k=card.dataset.k;
+  const ed=e.target.closest('[data-edit]');if(ed){openEdit(ed.dataset.edit);return;}
+  const sb=e.target.closest('[data-s]');
+  if(sb){mutateDay(S.date,x=>{if(sb.dataset.s==='P')delete x.att[k];else x.att[k]=sb.dataset.s;});return;}
+  const pm=e.target.closest('[data-d]');
+  if(pm){const d=+pm.dataset.d;mutateDay(S.date,x=>{x.pts[k]=(x.pts[k]||0)+d;if(!x.pts[k])delete x.pts[k];
+    x.log.push({k,d,r:S.reason,t:new Date().toLocaleString('sv-SE',{timeZone:TZ})});});}
+};
+$('#log').onclick=e=>{const b=e.target.closest('[data-undo]');if(!b)return;const i=+b.dataset.undo;
+  mutateDay(S.date,x=>{const en=x.log[i];if(!en)return;const bag=en.g?x.gpts:x.pts,id=en.g||en.k;bag[id]=(bag[id]||0)-en.d;if(!bag[id])delete bag[id];x.log.splice(i,1);});toast('已撤銷');};
+
+// roster edits
+$('#rosterTbl').addEventListener('change',e=>{const inp=e.target.closest('input[data-f],select[data-f]');if(!inp)return;
+  const k=inp.closest('tr').dataset.k,f=inp.dataset.f,v=inp.value.trim();
+  if(f==='name'&&!v){toast('姓名不能空白');inp.value=S.students.find(s=>s.key===k)?.name||'';return;}
+  saveStu(k,{[f]:v});toast('已儲存');renderRoll();});
+$('#rosterTbl').addEventListener('focusout',()=>setTimeout(()=>{if(rosterPending)renderRoster();},0));
+$('#rosterTbl').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('input'))e.target.blur();});
+let delArm=null;
+$('#rosterTbl').addEventListener('click',e=>{const tr=e.target.closest('tr[data-k]');if(!tr)return;const k=tr.dataset.k,s=S.students.find(x=>x.key===k);
+  if(e.target.closest('[data-toggle]')){saveStu(k,{active:s.active===false});render();return;}
+  const del=e.target.closest('[data-del]');
+  if(del){ if(delArm!==k){delArm=k;del.textContent='再按一次';setTimeout(()=>{if(delArm===k){delArm=null;renderRoster();}},2500);return;}
+    delArm=null; if(!guard())return; removeStu(k); toast(`已刪除 ${s.name}`); render(); }});
+$('#addStu').onclick=()=>{const k=createStu({cls:'',seat:'',sid:'',name:'新同學',active:true});if(!k)return;render();
+  setTimeout(()=>{const i=document.getElementById(`r-${k}-name`);i?.focus();i?.select();},50);};
+$('#bulkGo').onclick=()=>{
+  if(!guard())return;
+  const rows=$('#bulk').value.split('\n').map(l=>l.trim().split(/\s+/)).filter(p=>p.length>=4&&p[0]);
+  if(!rows.length){$('#bulkMsg').textContent='沒有讀到名單：每行要有 班級 座號 學號 姓名';return;}
+  let up=0,add=0,off=0;const seen=new Set();
+  for(const [cls,seat,sid,...n] of rows){const name=n.join('');seen.add(sid);
+    const s=S.students.find(x=>x.sid===sid);
+    if(s){const patch={};if(s.cls!==cls)patch.cls=cls;if(s.seat!==seat)patch.seat=seat;if(s.name!==name)patch.name=name;if(s.active===false)patch.active=true;
+      if(Object.keys(patch).length){saveStu(s.key,patch);up++;}}
+    else{createStu({cls,seat,sid,name,active:true});add++;}}
+  if($('#bulkDrop').checked) for(const s of S.students) if(s.active!==false&&!seen.has(s.sid)){saveStu(s.key,{active:false});off++;}
+  $('#bulkMsg').textContent=`更新 ${up} 位、新增 ${add} 位${off?`、標記退社 ${off} 位`:''}`;render();};
+$('#copyCsv').onclick=()=>{
+  const dates=allDates(),stus=[...S.students].sort(sortStu);
+  const rows=[['班級','座號','學號','姓名','組別','狀態',...dates.map(d=>{const i=SESSIONS.indexOf(d);return (i>=0?'第'+(i+1)+'次 ':'補課 ')+d.slice(5)}),'出席','遲到','請假','曠課','總分']];
+  for(const s of stus){const t=totals(s.key);rows.push([s.cls,s.seat,s.sid,s.name,gName(s.group),s.active===false?'退社':'在籍',
+    ...dates.map(d=>{if(isFuture(d))return '';const x=dayOf(d),st=x.att?.[s.key]||'P',p=x.pts?.[s.key]||0;return (st==='P'?'':STAT[st])+(p?fmt(p):'');}),t.c.P+t.c.T,t.c.T,t.c.L,t.c.A,t.pts]);}
+  const txt=rows.map(r=>r.join('\t')).join('\n');
+  const fb=()=>{const ta=document.createElement('textarea');ta.value=txt;document.body.append(ta);ta.select();try{document.execCommand('copy');toast('已複製，貼到 Excel 即可');}catch(e){toast('複製失敗');}ta.remove();};
+  if(navigator.clipboard)navigator.clipboard.writeText(txt).then(()=>toast('已複製，貼到 Excel 即可'),fb);else fb();};
+
+// edit dialog
+let editKey=null;
+function openEdit(k){const s=S.students.find(x=>x.key===k);if(!s)return;editKey=k;
+  $('#f-name').value=s.name||'';$('#f-cls').value=s.cls||'';$('#f-seat').value=s.seat||'';$('#f-sid').value=s.sid||'';$('#f-off').checked=s.active===false;
+  const d=$('#dlg');if(d.showModal)d.showModal();else d.setAttribute('open','');setTimeout(()=>$('#f-name').select(),30);}
+$('#dlg').addEventListener('close',()=>{const d=$('#dlg');if(d.returnValue!=='ok'||!editKey)return;
+  const s=S.students.find(x=>x.key===editKey);const patch={};
+  const v={name:$('#f-name').value.trim(),cls:$('#f-cls').value.trim(),seat:$('#f-seat').value.trim(),sid:$('#f-sid').value.trim(),active:!$('#f-off').checked};
+  for(const f in v) if(v[f]!==(f==='active'?s.active!==false:s[f]||'')) patch[f]=v[f];
+  if(!v.name){toast('姓名不能空白');return;}
+  if(Object.keys(patch).length){saveStu(editKey,patch);toast('已更新 '+v.name);render();}editKey=null;});
+
+// group scores on the roll tab
+$('#gscore').onclick=e=>{const b=e.target.closest('[data-gd]');if(!b)return;const g=b.closest('.gcard').dataset.g,d=+b.dataset.gd;
+  mutateDay(S.date,x=>{x.gpts[g]=(x.gpts[g]||0)+d;if(!x.gpts[g])delete x.gpts[g];x.log.push({g,d,r:S.reason,t:new Date().toLocaleString('sv-SE',{timeZone:TZ})});});};
+$('#sortRow').onclick=e=>{const b=e.target.closest('[data-sort]');if(!b)return;S.sortBy=b.dataset.sort;try{localStorage.setItem('xs-roll-sort',S.sortBy)}catch(x){}renderRoll();};
+// groups board
+$('#addGroup').onclick=()=>{if(!guard())return;const g={id:newGroupId(),name:nextGroupName()};S.groups.push(g);saveGroups();render();
+  setTimeout(()=>{const i=document.getElementById('gn-'+g.id);i?.focus();i?.select();},50);};
+$('#makeGroups').onclick=()=>{if(!guard())return;const n=Math.max(2,Math.min(12,+$('#nGroups').value||4));
+  for(let i=0;i<n;i++)S.groups.push({id:newGroupId()+i,name:nextGroupName()});saveGroups();render();toast(`已建立 ${n} 組，把同學拖進各組吧`);};
+$('#board').addEventListener('change',e=>{const i=e.target.closest('[data-gname]');if(!i)return;const g=S.groups.find(x=>x.id===i.dataset.gname);if(!g)return;
+  const v=i.value.trim();if(!v){i.value=g.name;toast('組名不能空白');return;}if(v===g.name)return;g.name=v;saveGroups();renderRoll();toast('已改名為 '+v);});
+$('#board').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('input'))e.target.blur();
+  if((e.key==='Enter'||e.key===' ')&&e.target.matches('.gchip')){e.preventDefault();S.sel=S.sel===e.target.dataset.k?null:e.target.dataset.k;renderGroups();document.querySelector(`.gchip[data-k="${S.sel}"]`)?.focus();}});
+$('#board').addEventListener('focusout',()=>setTimeout(()=>{if(boardPending)renderGroups();},0));
+let gdelArm=null;
+$('#board').addEventListener('click',e=>{
+  const del=e.target.closest('[data-gdel]');
+  if(del){const id=del.dataset.gdel;if(gdelArm!==id){gdelArm=id;del.textContent='再按一次';setTimeout(()=>{if(gdelArm===id){gdelArm=null;renderGroups();}},2500);return;}
+    gdelArm=null;if(!guard())return;const name=gName(id);
+    S.students.filter(s=>s.group===id).forEach(s=>saveStu(s.key,{group:''}));
+    S.groups=S.groups.filter(g=>g.id!==id);saveGroups();render();toast(`已刪除 ${name}，組員移到未分組`);return;}
+  if(e.target.closest('.gchip,button'))return;
+  if(e.target.closest('input')&&!S.sel)return;
+  const col=e.target.closest('.gcol');if(col&&S.sel)moveTo(S.sel,col.dataset.g);});
+// pointer drag (mouse + touch)
+let drag=null;
+$('#board').addEventListener('pointerdown',e=>{const chip=e.target.closest('.gchip');if(!chip||e.button>0)return;
+  drag={key:chip.dataset.k,x:e.clientX,y:e.clientY,chip,ghost:null,id:e.pointerId};});
+window.addEventListener('pointermove',e=>{
+  if(!drag||e.pointerId!==drag.id)return;
+  if(!drag.ghost){if(Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<6)return;
+    const r=drag.chip.getBoundingClientRect();drag.dx=drag.x-r.left;drag.dy=drag.y-r.top;
+    drag.ghost=drag.chip.cloneNode(true);drag.ghost.classList.add('ghost');drag.ghost.style.width=r.width+'px';document.body.append(drag.ghost);drag.chip.classList.add('dragging');}
+  e.preventDefault();
+  drag.ghost.style.transform=`translate(${e.clientX-drag.dx}px,${e.clientY-drag.dy}px) rotate(-2deg)`;
+  const col=document.elementFromPoint(e.clientX,e.clientY)?.closest('.gcol');
+  document.querySelectorAll('.gcol.over').forEach(c=>{if(c!==col)c.classList.remove('over');});col?.classList.add('over');
+},{passive:false});
+function endDrag(e,cancel){if(!drag||e.pointerId!==drag.id)return;const d=drag;drag=null;
+  document.querySelectorAll('.gcol.over').forEach(c=>c.classList.remove('over'));
+  if(d.ghost){d.ghost.remove();d.chip.classList.remove('dragging');
+    if(!cancel){const col=document.elementFromPoint(e.clientX,e.clientY)?.closest('.gcol');if(col)moveTo(d.key,col.dataset.g);}}
+  else if(!cancel){S.sel=S.sel===d.key?null:d.key;renderGroups();}}
+window.addEventListener('pointerup',e=>endDrag(e,false));
+window.addEventListener('pointercancel',e=>endDrag(e,true));
+
+// ---------- boot ----------
+$('#c-go').onclick=async()=>{
+  const url=$('#c-url').value.trim(), token=$('#c-pw').value;
+  if(!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)){$('#c-msg').textContent='網址要是 https://script.google.com/…/exec 這種格式';return;}
+  if(!token){$('#c-msg').textContent='請輸入密碼';return;}
+  cfg={url,token}; try{localStorage.setItem(CFG_KEY,JSON.stringify(cfg));}catch(e){}
+  lastErr=false; $('#c-pw').value=''; await load();
+};
+$('#c-pw').addEventListener('keydown',e=>{if(e.key==='Enter')$('#c-go').click();});
+$('#btnSetup').onclick=()=>showSetup();
+$('#btnReload').onclick=()=>load();
+showTab(S.tab);
+if(!cfg) showSetup(); else load(true);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S.ready)load(true);});
+setInterval(()=>{if(document.visibilityState==='visible'&&S.ready&&!inflight&&!document.activeElement?.closest?.('#rosterTbl,#dlg'))load(true);},90000);
+window.addEventListener('online',retryPending);
+</script>
+</body>
+</html>
